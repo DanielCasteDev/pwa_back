@@ -32,6 +32,10 @@ app.get('/', (req, res) => {
 const cartRoutes = require('./routes/cart');
 app.use('/api/cart', cartRoutes);
 
+// Rutas de notificaciones push
+const notificationRoutes = require('./routes/notifications');
+app.use('/api/notifications', notificationRoutes);
+
 app.listen(PORT, () => {
   console.log(`🚀 Servidor ejecutándose en http://localhost:${PORT}`);
 });
