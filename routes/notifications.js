@@ -1,6 +1,7 @@
 const express = require('express');
 const webpush = require('web-push');
 const Subscription = require('../models/Subscription');
+const authenticateToken = require('../middleware/auth');
 const router = express.Router();
 
 // 🔑 Claves VAPID específicas para pwa_back
@@ -15,15 +16,17 @@ webpush.setVapidDetails(
   vapidKeys.privateKey
 );
 
-// 📬 Guardar suscripción
-router.post('/subscribe', async (req, res) => {
+// 📬 Guardar suscripción (requiere autenticación)
+router.post('/subscribe', authenticateToken, async (req, res) => {
   try {
     const subscription = req.body;
+    const userId = req.user.id;
     
-    // Guardar o actualizar suscripción
+    // Guardar o actualizar suscripción asociada al usuario
     await Subscription.findOneAndUpdate(
       { endpoint: subscription.endpoint },
       {
+        userId,
         ...subscription,
         userAgent: req.get('User-Agent'),
         lastUsed: new Date()
@@ -31,7 +34,7 @@ router.post('/subscribe', async (req, res) => {
       { upsert: true, new: true }
     );
 
-    console.log('✅ Nueva suscripción guardada:', subscription.endpoint);
+    console.log(`✅ Suscripción guardada para usuario ${req.user.email}:`, subscription.endpoint);
     res.status(201).json({ 
       success: true, 
       message: 'Suscripción guardada correctamente' 
@@ -45,10 +48,11 @@ router.post('/subscribe', async (req, res) => {
   }
 });
 
-// 🚀 Enviar notificación a todos
-router.post('/send-notification', async (req, res) => {
+// 🚀 Enviar notificación al usuario actual
+router.post('/send-notification', authenticateToken, async (req, res) => {
   try {
     const { title, body, icon, badge, data } = req.body;
+    const userId = req.user.id;
 
     const payload = JSON.stringify({
       title: title || 'TechStore Notificación',
@@ -58,9 +62,22 @@ router.post('/send-notification', async (req, res) => {
       data: data || {}
     });
 
-    const subscriptions = await Subscription.find();
+    // Buscar solo las suscripciones del usuario actual
+    const subscriptions = await Subscription.find({ userId });
     let successCount = 0;
     let errorCount = 0;
+
+    if (subscriptions.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No hay suscripciones activas para este usuario',
+        stats: {
+          total: 0,
+          success: 0,
+          errors: 0
+        }
+      });
+    }
 
     for (const sub of subscriptions) {
       try {
@@ -81,7 +98,7 @@ router.post('/send-notification', async (req, res) => {
       }
     }
 
-    console.log(`📤 Notificaciones enviadas: ${successCount} exitosas, ${errorCount} errores`);
+    console.log(`📤 Notificaciones enviadas al usuario ${req.user.email}: ${successCount} exitosas, ${errorCount} errores`);
     
     res.json({
       success: true,
@@ -126,10 +143,11 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// 🛒 Enviar notificación cuando se agrega producto al carrito
-router.post('/cart-notification', async (req, res) => {
+// 🛒 Enviar notificación cuando se agrega producto al carrito (solo al usuario actual)
+router.post('/cart-notification', authenticateToken, async (req, res) => {
   try {
     const { productName, productPrice, cartCount, cartTotal } = req.body;
+    const userId = req.user.id;
 
     const payload = JSON.stringify({
       title: '🛒 Producto agregado al carrito',
@@ -147,9 +165,22 @@ router.post('/cart-notification', async (req, res) => {
       }
     });
 
-    const subscriptions = await Subscription.find();
+    // Buscar solo las suscripciones del usuario actual
+    const subscriptions = await Subscription.find({ userId });
     let successCount = 0;
     let errorCount = 0;
+
+    if (subscriptions.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No hay suscripciones activas para este usuario',
+        stats: {
+          total: 0,
+          success: 0,
+          errors: 0
+        }
+      });
+    }
 
     for (const sub of subscriptions) {
       try {
@@ -170,7 +201,7 @@ router.post('/cart-notification', async (req, res) => {
       }
     }
 
-    console.log(`🛒 Notificación de carrito enviada: ${successCount} exitosas, ${errorCount} errores`);
+    console.log(`🛒 Notificación enviada al usuario ${req.user.email}: ${successCount} exitosas, ${errorCount} errores`);
     
     res.json({
       success: true,

@@ -28,6 +28,10 @@ app.get('/', (req, res) => {
   res.json({ mensaje: 'Hola Mundo!' });
 });
 
+// Rutas de autenticación
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
+
 // Rutas de carrito
 const cartRoutes = require('./routes/cart');
 app.use('/api/cart', cartRoutes);
